@@ -35,6 +35,7 @@ def run_happy_path_tests(ext):
         v = torch.randn_like(q)
 
         out_custom = ext.flash_attention_naive(q, k, v)
+        torch.cuda.synchronize()
         out_ref = reference_scaled_dot_product_attention(q, k, v)
 
         # Use a relaxed tolerance to match float32 GPU behavior.

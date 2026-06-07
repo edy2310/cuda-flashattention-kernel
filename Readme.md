@@ -21,7 +21,7 @@ This project is a hands‑on, progressively optimized CUDA implementation of Fla
 - **Input layout:** `[B, H, N, D]` (batch, heads, sequence length, head dimension).
 - **Warp‑per‑query mapping:** each warp computes one output row, enabling efficient shuffles.
 - **Online softmax:** numerically stable in a single pass over keys.
-- **Shared‑memory tiling:** reduces global memory traffic; padded stride `D + 1` to reduce bank conflicts.
+- **Shared‑memory tiling:** reduces global memory traffic with a shared-memory layout tuned to stay within common Colab GPU limits.
 
 ## Build the extension
 Requires a CUDA‑capable GPU and PyTorch built with CUDA.

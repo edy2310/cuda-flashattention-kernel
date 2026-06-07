@@ -1,5 +1,6 @@
 #include <cuda_runtime.h>
 #include <math.h>
+#include <c10/cuda/CUDAException.h>
 
 // This is a simple FlashAttention-style kernel with shared-memory tiling
 // and an online softmax update. It uses warp-level primitives to reduce
@@ -63,9 +64,10 @@ __global__ void flash_attention_naive(
     // sV: [BLOCK_N, D] for the value tile
     // sO: [BLOCK_M, D] for the output accumulator
     //
-    // We pad the stride by +1 to reduce shared-memory bank conflicts.
+    // Use a tight stride here so the kernel stays within shared-memory limits
+    // on smaller Colab GPUs when D is 128.
     extern __shared__ float smem[];
-    const int stride = D + 1;
+    const int stride = D;
     float* sQ = smem;
     float* sK = sQ + BLOCK_M * stride;
     float* sV = sK + BLOCK_N * stride;
@@ -184,6 +186,7 @@ extern "C" void launch_flash_attention_naive(
     const int blocks_y = (N + BLOCK_M - 1) / BLOCK_M;
     dim3 grid(B * H, blocks_y, 1);
     const size_t shared_bytes =
-        (2 * BLOCK_M + 2 * BLOCK_N) * (size_t)(D + 1) * sizeof(float);
+        (2 * BLOCK_M + 2 * BLOCK_N) * (size_t)D * sizeof(float);
     flash_attention_naive<<<grid, block, shared_bytes, stream>>>(Q, K, V, O, B, H, N, D);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
