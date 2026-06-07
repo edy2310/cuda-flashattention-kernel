@@ -2,13 +2,12 @@ import os
 import sys
 
 import torch
-import torch.nn.functional as F
 
 # Allow importing benchmark modules from the repo root.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-from benchmarks.baseline_benchmark import load_extension
+from benchmarks.baseline_benchmark import load_extension, reference_scaled_dot_product_attention
 
 
 def expect_raises(fn, expected_message):
@@ -36,7 +35,7 @@ def run_happy_path_tests(ext):
         v = torch.randn_like(q)
 
         out_custom = ext.flash_attention_naive(q, k, v)
-        out_ref = F.scaled_dot_product_attention(q, k, v, is_causal=False)
+        out_ref = reference_scaled_dot_product_attention(q, k, v)
 
         # Use a relaxed tolerance to match float32 GPU behavior.
         torch.testing.assert_close(out_custom, out_ref, rtol=1e-3, atol=1e-3)

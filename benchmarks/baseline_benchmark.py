@@ -5,6 +5,12 @@ import sys
 import torch
 import torch.nn.functional as F
 
+try:
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+except ImportError:
+    SDPBackend = None
+    sdpa_kernel = None
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
@@ -17,6 +23,23 @@ def load_extension():
         raise RuntimeError(
             "flash_attn_ext is not built. Run: python setup.py build_ext --inplace"
         ) from exc
+
+
+def _reference_sdpa_context():
+    if sdpa_kernel is not None and SDPBackend is not None:
+        return sdpa_kernel(backends=[SDPBackend.MATH])
+    return torch.backends.cuda.sdp_kernel(
+        enable_flash=False,
+        enable_mem_efficient=False,
+        enable_math=True,
+    )
+
+
+def reference_scaled_dot_product_attention(q, k, v):
+    # Force the math backend so the reference path stays portable on Colab GPUs
+    # where fused SDPA can reject valid inputs with CUDA error 10.
+    with _reference_sdpa_context():
+        return F.scaled_dot_product_attention(q, k, v, is_causal=False)
 
 
 def time_fn(fn, iters):
@@ -45,16 +68,16 @@ def run_benchmark(B=1, H=8, N=512, D=64, iters=100, warmup=10, check=False, seed
     # Warmup runs to stabilize performance.
     for _ in range(warmup):
         _ = ext.flash_attention_naive(q, k, v)
-        _ = F.scaled_dot_product_attention(q, k, v, is_causal=False)
+        _ = reference_scaled_dot_product_attention(q, k, v)
 
     max_diff = None
     if check:
-        out_ref = F.scaled_dot_product_attention(q, k, v, is_causal=False)
+        out_ref = reference_scaled_dot_product_attention(q, k, v)
         out_custom = ext.flash_attention_naive(q, k, v)
         max_diff = (out_ref - out_custom).abs().max().item()
 
     t_custom = time_fn(lambda: ext.flash_attention_naive(q, k, v), iters)
-    t_torch = time_fn(lambda: F.scaled_dot_product_attention(q, k, v, is_causal=False), iters)
+    t_torch = time_fn(lambda: reference_scaled_dot_product_attention(q, k, v), iters)
 
     return {
         "B": B,
