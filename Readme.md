@@ -23,6 +23,14 @@ This project is a hands‑on CUDA implementation of FlashAttention built as a po
 - **Online softmax:** numerically stable in a single pass over keys.
 - **Shared‑memory tiling:** reduces global memory traffic with a shared-memory layout tuned to stay within common Colab GPU limits.
 
+## What this project demonstrates
+1. **CUDA kernel engineering:** tiling, shared memory, warp-level reductions, and launch configuration.
+2. **Performance reasoning:** identifying when a custom kernel can get closer to a highly optimized library path.
+3. **Numerical stability:** online softmax that remains stable for large dot products.
+4. **Systems integration:** a C++/CUDA extension wired into Python and reused across tests, benchmarks, and deployment.
+5. **Production awareness:** Triton backend + Docker workflow to show the kernel can fit into a serving pipeline.
+
+
 ## Build the extension
 Requires a CUDA‑capable GPU and PyTorch built with CUDA.
 
@@ -35,8 +43,6 @@ python3 setup.py build_ext --inplace
 python3 -m pip install matplotlib
 python3 benchmarks/config_sweep_benchmark.py
 ```
-
-
 
 Performance results
 -------------------
@@ -101,16 +107,3 @@ Run the example client:
 python3 -m pip install tritonclient[http]
 python3 triton_deploy/client.py
 ```
-
-## What this project demonstrates
-1. **CUDA kernel engineering:** tiling, shared memory, warp-level reductions, and launch configuration.
-2. **Performance reasoning:** identifying when a custom kernel can get closer to a highly optimized library path.
-3. **Numerical stability:** online softmax that remains stable for large dot products.
-4. **Systems integration:** a C++/CUDA extension wired into Python and reused across tests, benchmarks, and deployment.
-5. **Production awareness:** Triton backend + Docker workflow to show the kernel can fit into a serving pipeline.
-
-## Next optimization targets
-1. Larger tiles / better occupancy trade‑offs.
-2. Vectorized loads/stores and improved memory coalescing.
-3. Mixed‑precision (FP16/BF16) paths with Tensor Cores.
-4. More aggressive kernel fusion and reduced register pressure.
