@@ -1,14 +1,14 @@
 # FlashAttention Kernel: CUDA attention for NVIDIA GPUs
 
-This repository centers on a CUDA FlashAttention-style kernel, the PyTorch C++/CUDA extension that exposes it, and the benchmark and Triton integration paths that exercise it. The codebase ties together kernel implementation, input validation, launch configuration, correctness checks against PyTorch SDPA, and performance analysis through multiple benchmark scripts and serving examples.
+This repository centers on a CUDA FlashAttention-style kernel, the PyTorch C++/CUDA extension that exposes it, and the benchmark and Triton integration paths that exercise it. The codebase combines kernel implementation, explicit launch geometry, contiguous tensor validation, correctness checks against PyTorch SDPA, and performance analysis through benchmark scripts and serving examples.
 
-## 2. Demonstrated Capabilities
+## 2. Core Technical Highlights
 
 - **Kernel Design:** one warp per query row, shared-memory tiling, online softmax, and explicit launch geometry.
-- **Systems Integration:** PyTorch C++/CUDA extension wiring with a Python entrypoint and strict input validation.
+- **Extension Integration:** PyTorch C++/CUDA binding with a Python entrypoint and strict input validation.
 - **Performance Analysis:** latency, throughput, shape-scaling, and roofline-style benchmarking against PyTorch SDPA.
-- **Production Deployment:** Triton model repository, Docker image, and example client for serving.
-- **Correctness Engineering:** reference comparisons, tolerance checks, and negative-path validation.
+- **Serving Integration:** Triton model repository, Docker image, and example client for inference.
+- **Validation:** reference comparisons, tolerance checks, and negative-path coverage for device, dtype, contiguity, and shape mismatches.
 
 ## 3. Architecture & Design Decisions
 
@@ -23,11 +23,11 @@ This repository centers on a CUDA FlashAttention-style kernel, the PyTorch C++/C
 - Shared memory uses a tight stride of `D` to keep the footprint predictable on smaller CUDA-capable GPUs.
 - Tile sizes (`BLOCK_M = 16`, `BLOCK_N = 32`) balance reuse, occupancy, and shared-memory pressure.
 
-### Engineering Trade-offs
-- I kept the kernel intentionally simple and auditable instead of overfitting it to a single benchmark.
-- The current implementation favors float32 correctness and clarity over tensor-core or mixed-precision complexity.
+### Implementation Trade-offs
+- The kernel stays intentionally simple and auditable instead of overfitting to a single benchmark.
+- The implementation favors float32 correctness and clarity over tensor-core or mixed-precision complexity.
 - One-warp-per-query is not the absolute fastest design, but it is easy to reason about, validate, and extend.
-- The Triton/Docker path shows the kernel can live inside a serving stack, not just a notebook.
+- The Triton/Docker path shows the kernel inside a serving stack rather than only in a notebook workflow.
 
 ## 4. Performance Results & Interpretation
 
