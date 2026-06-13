@@ -1,109 +1,118 @@
-# FlashAttention Kernel
+# FlashAttention Kernel: CUDA attention for NVIDIA GPUs
 
-This project is a hands‑on CUDA implementation of FlashAttention built as a portfolio piece for GPU and Kernel Engineer interviews. It is meant to show that I can reason about memory layout, tiling, warp-level execution, numerical stability, and performance tradeoffs with the same rigor I apply to large-scale systems.
+This portfolio project is meant to show interviewers that I can do GPU kernel, inference, and systems work even though my professional background is in distributed systems and cloud computing. That background is an asset here: performance engineering, capacity planning, operational rigor, and deployment discipline transfer directly to low-level CUDA work.
 
-## Highlights
-1. **Custom CUDA kernel** that demonstrates shared-memory tiling, online softmax, and warp-level reductions.
-2. **PyTorch C++/CUDA extension** wired into Python so the kernel can be built once and reused in tests and benchmarks.
-3. **Benchmark suite** that compares scaling behavior against PyTorch `scaled_dot_product_attention` with CSV output and plots.
-4. **Correctness tests** that validate multiple shapes and bad paths, showing the kernel is not just fast but also reliable.
-5. **Triton backend** plus Docker support to show the kernel can be packaged with a production-minded deployment path.
+## 2. Demonstrated Capabilities
 
-## Architecture overview
-- `kernels/FlashAttentionKernel.cu`: FlashAttention forward kernel; one warp computes one query row.
-- `csrc/flash_attn_ext.cpp`: PyTorch extension binding that calls the CUDA launcher.
-- `setup.py`: builds the C++/CUDA extension once for reuse.
-- `benchmarks/`: baseline, config sweep, shape scaling, and throughput/latency scripts.
-- `tests/`: correctness tests vs PyTorch reference and error‑path checks.
-- `triton_deploy/`: Triton model repository, Dockerfile, and example client.
+- **Kernel Design:** one warp per query row, shared-memory tiling, online softmax, and explicit launch geometry.
+- **Systems Integration:** PyTorch C++/CUDA extension wiring with a Python entrypoint and strict input validation.
+- **Performance Analysis:** latency, throughput, shape-scaling, and roofline-style benchmarking against PyTorch SDPA.
+- **Production Deployment:** Triton model repository, Docker image, and example client for serving.
+- **Correctness Engineering:** reference comparisons, tolerance checks, and negative-path validation.
 
-## Kernel design notes
-- **Input layout:** `[B, H, N, D]` (batch, heads, sequence length, head dimension).
-- **Warp‑per‑query mapping:** each warp computes one output row, enabling efficient shuffles.
-- **Online softmax:** numerically stable in a single pass over keys.
-- **Shared‑memory tiling:** reduces global memory traffic with a shared-memory layout tuned to stay within common Colab GPU limits.
+## 3. Architecture & Design Decisions
 
-## What this project demonstrates
-1. **CUDA kernel engineering:** tiling, shared memory, warp-level reductions, and launch configuration.
-2. **Performance reasoning:** identifying when a custom kernel can get closer to a highly optimized library path.
-3. **Numerical stability:** online softmax that remains stable for large dot products.
-4. **Systems integration:** a C++/CUDA extension wired into Python and reused across tests, benchmarks, and deployment.
-5. **Production awareness:** Triton backend + Docker workflow to show the kernel can fit into a serving pipeline.
+### Execution Flow
+1. `csrc/flash_attn_ext.cpp` validates inputs, allocates the output tensor, and launches the CUDA kernel on PyTorch's current stream.
+2. `kernels/FlashAttentionKernel.cu` maps `grid.x` to `(batch, head)` and `grid.y` to query tiles.
+3. Each warp computes one query row while keys and values stream through shared-memory tiles.
+4. Online softmax keeps the computation numerically stable without materializing the full attention matrix.
 
+### Memory Layout
+- Inputs and outputs are contiguous row-major tensors with shape `[B, H, N, D]`.
+- Shared memory uses a tight stride of `D` to keep the footprint predictable on smaller CUDA-capable GPUs.
+- Tile sizes (`BLOCK_M = 16`, `BLOCK_N = 32`) balance reuse, occupancy, and shared-memory pressure.
 
-## Build the extension
-Requires a CUDA‑capable GPU and PyTorch built with CUDA.
+### Engineering Trade-offs
+- I kept the kernel intentionally simple and auditable instead of overfitting it to a single benchmark.
+- The current implementation favors float32 correctness and clarity over tensor-core or mixed-precision complexity.
+- One-warp-per-query is not the absolute fastest design, but it is easy to reason about, validate, and extend.
+- The Triton/Docker path shows the kernel can live inside a serving stack, not just a notebook.
+
+## 4. Performance Results & Interpretation
+
+Regenerate these figures with `python3 -m pip install matplotlib && python3 benchmarks/config_sweep_benchmark.py`.
+
+### Latency
+
+#### Plot
+
+![Latency benchmark](benchmarks/results/flashattention_latency.png)
+
+#### Interpretation
+
+The custom kernel is slower than PyTorch SDPA, but it tracks the same growth pattern as sequence length increases. That matters because it shows the implementation is structurally correct and scales like a real attention kernel, not a toy CUDA exercise. For interviewers, the important signal is that I can explain why the gap exists: PyTorch benefits from years of tuning, fused paths, and mature low-level optimizations that this project has not yet reached.
+
+### Shape Scaling
+
+#### Plot
+
+![Shape scaling benchmark](benchmarks/results/flashattention_shape_scaling.png)
+
+#### Interpretation
+
+This plot shows the kernel reacting predictably as `D` and `N` change, which is what you want from engineered GPU code. Larger head dimensions increase per-token work, while longer sequences stress the tiled key/value traversal and make memory behavior more visible. The point is not that the custom kernel wins everywhere; the point is that it behaves coherently across shapes and exposes the exact places where optimization effort should go.
+
+### Throughput
+
+#### Plot
+
+![Throughput benchmark](benchmarks/results/flashattention_throughput.png)
+
+#### Interpretation
+
+As batch size increases, the kernel gets better utilization because the GPU has more independent work to schedule. PyTorch still wins on absolute numbers, but the trend is useful: it shows the implementation benefits from batching, and it highlights the deployment scenarios where a specialized kernel can be competitive enough to matter. This is the kind of reasoning I want reviewers to see—hardware-aware thinking, not just code that runs.
+
+### Roofline
+
+#### Plot
+
+![Roofline benchmark](benchmarks/results/flashattention_roofline.png)
+
+#### Interpretation
+
+The roofline view places the kernel in a realistic performance context. It makes the compute-vs-bandwidth trade-off visible and shows why attention kernels live or die on memory behavior, arithmetic intensity, and launch efficiency. This is especially relevant for inference roles, where the goal is often to maximize useful work per byte moved rather than chase peak FLOPs in isolation.
+
+## 5. Correctness & Validation
+
+I validate the kernel in two ways: by comparing outputs against PyTorch SDPA forced onto the math backend, and by checking failure paths for device, dtype, contiguity, and shape mismatches. The tests also use multiple tensor shapes to cover more than one happy path and keep the kernel honest as dimensions change.
+
+```bash
+python3 tests/test_flash_attention.py
+```
+
+## 6. Quick Start
+
+### Requirements
+
+- CUDA-capable NVIDIA GPU
+- PyTorch with CUDA support
+- Python 3
+
+### Build
 
 ```bash
 python3 setup.py build_ext --inplace
 ```
 
-## Run benchmarks
-```bash
-python3 -m pip install matplotlib
-python3 benchmarks/config_sweep_benchmark.py
+### Example Usage
+
+```python
+import torch
+import flash_attn_ext
+
+q = torch.randn(1, 8, 256, 64, device="cuda", dtype=torch.float32)
+k = torch.randn_like(q)
+v = torch.randn_like(q)
+
+out = flash_attn_ext.flash_attention_naive(q, k, v)
 ```
 
-Performance results
--------------------
-These results are included to show how a hand-written CUDA kernel behaves under realistic workloads, where it can approach a mature library implementation, and where there is still headroom for optimization.
+## 7. Optimization Roadmap
 
-**Latency**
-
-![Benchmark](benchmarks/results/flashattention_latency.png)
-
-#### Latency interpretation
-
-The latency plot shows that the custom kernel is slower than PyTorch, but it still follows the same scaling curve as the problem grows, which is exactly what you want from a solid CUDA implementation. That behavior demonstrates that the kernel is functionally correct, numerically stable, and engineered with the right algorithmic structure, even if it does not yet match the aggressively tuned kernels shipped by PyTorch. It also shows where a hand-written kernel can close the gap: on smaller or more regular shapes, and in cases where launch overhead, memory access patterns, or domain-specific constraints make a tailored implementation competitive enough to justify its use.
-
--------------------
-
-**Shape Scaling**
-
-![Benchmark](benchmarks/results/flashattention_shape_scaling.png)
-
-#### Shape Scaling interpretation
-
-The shape-scaling results are useful because they show the kernel behaving like a real production GPU implementation rather than a toy example. As `D` grows, the runtime rises in a controlled way, which suggests the memory layout, tiling strategy, and per-thread work distribution are all behaving as intended. As `N` grows, the cost increases much faster, but the custom kernel still tracks the same trend as the reference, showing that the implementation scales correctly and can remain practical in workloads where the sequence lengths are moderate or where the attention pattern is specialized enough that a custom kernel can get closer to an optimized library path.
-
-
--------------------
-
-**Throughput**
-
-![Benchmark](benchmarks/results/flashattention_throughput.png)
-
-#### Throughput interpretation
-
-The throughput plot is the strongest signal that the kernel is written with GPU execution in mind: as batch size increases, the hardware is fed with more independent work and the achieved throughput becomes more efficient and more stable. PyTorch still wins on absolute performance because its kernels are heavily optimized and battle-tested, but the custom implementation narrows the gap in settings where parallelism is high and the workload can be shaped to the kernel’s strengths. That is an important engineering result for an interview portfolio, because it shows you understand how batching, occupancy, and utilization interact on real GPUs, and that a custom kernel can become much more competitive when the workload matches its design.
-
--------------------
-
-**Roofline model**
-
-![Benchmark](benchmarks/results/flashattention_roofline.png)
-
-#### Roofline model interpretation
-
-The roofline chart places the kernel in a realistic engineering context: it is not trying to outperform a world-class PyTorch implementation on raw peak numbers, but it does show that the code is organized around the same fundamental GPU tradeoffs. The custom kernel moves in the right direction as operational intensity increases, which means it is extracting more useful work from the hardware and getting closer to the compute-bound regime where a specialized kernel can become more competitive. For an interviewer, that is the key story: this project demonstrates that you can reason about bandwidth, arithmetic intensity, and launch efficiency, and that you understand how a bespoke CUDA kernel can approach a professional library implementation when the workload and tiling choices line up well.
-
-
--------------------
-
-## Run correctness tests
-```bash
-python3 tests/test_flash_attention.py
-```
-
-## Triton deployment (optional)
-Build and run the Triton server:
-```bash
-docker build -t flashattn-triton triton_deploy
-docker run --gpus all -p 8000:8000 -p 8001:8001 -p 8002:8002 flashattn-triton
-```
-
-Run the example client:
-```bash
-python3 -m pip install tritonclient[http]
-python3 triton_deploy/client.py
-```
+- Add mixed precision (`fp16`/`bf16`) and tensor-core-friendly paths.
+- Use `cp.async` / double buffering to overlap global-memory traffic with compute.
+- Explore a persistent-kernel or split-K style design for longer sequences.
+- Fuse more work around the attention core, such as masking, dropout, or backward pass support.
+- Auto-tune tile sizes, occupancy, and launch parameters per GPU generation.
+- Extend roofline-style analysis to track achieved bandwidth and arithmetic intensity as the kernel evolves.
