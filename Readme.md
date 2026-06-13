@@ -1,6 +1,6 @@
 # FlashAttention Kernel: CUDA attention for NVIDIA GPUs
 
-This portfolio project is meant to show interviewers that I can do GPU kernel, inference, and systems work even though my professional background is in distributed systems and cloud computing. That background is an asset here: performance engineering, capacity planning, operational rigor, and deployment discipline transfer directly to low-level CUDA work.
+This repository centers on a CUDA FlashAttention-style kernel, the PyTorch C++/CUDA extension that exposes it, and the benchmark and Triton integration paths that exercise it. The codebase ties together kernel implementation, input validation, launch configuration, correctness checks against PyTorch SDPA, and performance analysis through multiple benchmark scripts and serving examples.
 
 ## 2. Demonstrated Capabilities
 
